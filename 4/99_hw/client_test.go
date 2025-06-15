@@ -184,27 +184,59 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 
 func SearchInternalErrorServer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusInternalServerError)
-	w.Write([]byte(`"error": "some unknown error"`))
+	w.Write([]byte(`{"error": "some unknown error"}`))
+}
+
+func SearchBadJsonServer(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"error": "some bad json}`))
+}
+
+func SearchBadRequestBadJsonServer(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(`{"error": "some bad json}`))
+}
+
+func SearchErrorBadOrderFieldServer(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(`{"error": "ErrorBadOrderField"}`))
+}
+
+func SearchErrorBadRequestUnknownServer(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(`{"error": "Unknown Error"}`))
 }
 
 func TestInternalErrorServer(t *testing.T) {
 	cases := []struct {
-		sRequest  SearchRequest
-		sResponse *SearchResponse
-		handler   http.HandlerFunc
-		err       error
+		sRequest SearchRequest
+		handler  http.HandlerFunc
+		err      error
 	}{
 		{
-			sRequest: SearchRequest{
-				Limit:      1,
-				Offset:     0,
-				Query:      "",
-				OrderField: "",
-				OrderBy:    0,
-			},
-			sResponse: nil,
-			handler:   SearchInternalErrorServer,
-			err:       fmt.Errorf("SearchServer fatal error"),
+			sRequest: SearchRequest{},
+			handler:  SearchInternalErrorServer,
+			err:      fmt.Errorf("SearchServer fatal error"),
+		},
+		{
+			sRequest: SearchRequest{},
+			handler:  SearchBadJsonServer,
+			err:      fmt.Errorf("cant unpack result json: unexpected end of JSON input"),
+		},
+		{
+			sRequest: SearchRequest{},
+			handler:  SearchBadRequestBadJsonServer,
+			err:      fmt.Errorf("cant unpack error json: unexpected end of JSON input"),
+		},
+		{
+			sRequest: SearchRequest{},
+			handler:  SearchErrorBadOrderFieldServer,
+			err:      fmt.Errorf("OrderFeld  invalid"),
+		},
+		{
+			sRequest: SearchRequest{},
+			handler:  SearchErrorBadRequestUnknownServer,
+			err:      fmt.Errorf("unknown bad request error: Unknown Error"),
 		},
 	}
 
@@ -579,7 +611,7 @@ func TestSearchServer(t *testing.T) {
 		{
 			sRequest:     SearchRequest{},
 			sResponse:    nil,
-			err:          fmt.Errorf("unknown error"),
+			err:          fmt.Errorf(`unknown error Get "123?limit=1&offset=0&order_by=0&order_field=&query=": unsupported protocol scheme ""`),
 			searchClient: SearchClient{URL: "123"},
 		},
 	}
@@ -595,7 +627,9 @@ func TestSearchServer(t *testing.T) {
 		result, err := client.FindUsers(c.sRequest)
 
 		if (err != nil) != (c.err != nil) {
-			t.Errorf("[%d] unexpected error: %v, expected: %v", i, err, c.err)
+			t.Errorf("[%d] unexpected error presence: %v, expected: %v", i, err, c.err)
+		} else if err != nil && err.Error() != c.err.Error() {
+			t.Errorf("[%d] unexpected error text: %v, expected: %v", i, err, c.err)
 		}
 
 		if !reflect.DeepEqual(result, c.sResponse) {
