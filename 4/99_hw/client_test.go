@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type Person struct {
@@ -207,6 +208,10 @@ func SearchErrorBadRequestUnknownServer(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(`{"error": "Unknown Error"}`))
 }
 
+func SearchErrorTimeoutServer(w http.ResponseWriter, r *http.Request) {
+	time.Sleep(time.Second * 1)
+}
+
 func TestInternalErrorServer(t *testing.T) {
 	cases := []struct {
 		sRequest SearchRequest
@@ -237,6 +242,11 @@ func TestInternalErrorServer(t *testing.T) {
 			sRequest: SearchRequest{},
 			handler:  SearchErrorBadRequestUnknownServer,
 			err:      fmt.Errorf("unknown bad request error: Unknown Error"),
+		},
+		{
+			sRequest: SearchRequest{},
+			handler:  SearchErrorTimeoutServer,
+			err:      fmt.Errorf("timeout for limit=1&offset=0&order_by=0&order_field=&query="),
 		},
 	}
 
