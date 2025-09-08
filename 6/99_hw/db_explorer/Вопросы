@@ -1,2 +1,0 @@
-1) Возврат ошибок, http.Error возвращает text, когда его использовать, вообще как лучше делать
-2) Почему нельзя 	query := fmt.Sprintf("SELECT * FROM %s OFFSET ? LIMIT ?", tableName)
