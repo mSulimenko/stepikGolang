@@ -18,11 +18,11 @@ func main() {
 }`
 	addr := "127.0.0.1:8082"
 
-	fmt.Println("Starting server...")
 	err := StartMyMicroservice(ctx, addr, ACLData)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Server started")
 
 	for {
 	}

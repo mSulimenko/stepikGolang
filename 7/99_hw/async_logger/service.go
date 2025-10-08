@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"google.golang.org/grpc"
 	"log"
 	"net"
@@ -21,29 +20,34 @@ func StartMyMicroservice(ctx context.Context, listenAddr string, ACLData string)
 		return err
 	}
 
-	conn, err := net.Listen("tcp", ":8082")
+	conn, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return err
 	}
+
+	statsTracker := MakeStatsTracker()
+	adminServ := MakeAdminManager(statsTracker)
+	bizServ := MakeBizManager()
+
 	authUnaryInterceptor := makeAclUnaryInterceptor(acl)
 	authStreamInterceptor := makeAuthStreamInterceptor(acl)
+
+	statUnaryInterceptor := makeStatUnaryInterceptor(statsTracker)
+	statStreamInterceptor := makeStatStreamInterceptor(statsTracker)
 
 	server := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			authUnaryInterceptor,
+			statUnaryInterceptor,
 		),
 		grpc.ChainStreamInterceptor(
 			authStreamInterceptor,
+			statStreamInterceptor,
 		),
 	)
 
-	adminServ := MakeAdminManager(acl)
-	bizServ := MakeBizManager()
-
 	RegisterAdminServer(server, adminServ)
 	RegisterBizServer(server, bizServ)
-
-	// todo разобраться с обработкой ошибок запуска
 
 	srvError := make(chan error, 1)
 
@@ -58,7 +62,6 @@ func StartMyMicroservice(ctx context.Context, listenAddr string, ACLData string)
 		case <-srvError:
 			log.Fatal("cannot start server")
 		case <-ctx.Done():
-			fmt.Println("Stopping server from context...")
 			server.GracefulStop()
 			conn.Close()
 		}

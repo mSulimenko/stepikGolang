@@ -9,6 +9,82 @@ import (
 	"strings"
 )
 
+func makeStatUnaryInterceptor(st *StatsTracker,
+) func(context.Context, interface{}, *grpc.UnaryServerInfo, grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "metadata required")
+		}
+
+		consumers := md.Get("consumer")
+		if len(consumers) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "consumer metadata required")
+		}
+
+		st.SendStats(DataPoint{
+			Consumer: consumers[0],
+			Method:   info.FullMethod,
+		})
+
+		return handler(ctx, req)
+	}
+}
+
+func makeStatStreamInterceptor(st *StatsTracker,
+) func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+) error {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md, ok := metadata.FromIncomingContext(ss.Context())
+		if !ok {
+			return status.Error(codes.Unauthenticated, "metadata required")
+		}
+
+		consumers := md.Get("consumer")
+		if len(consumers) == 0 {
+			return status.Error(codes.Unauthenticated, "consumer data required")
+		}
+
+		st.SendStats(DataPoint{
+			Consumer: consumers[0],
+			Method:   info.FullMethod,
+		})
+
+		return handler(srv, ss)
+	}
+}
+
+func makeAclUnaryInterceptor(acl map[string][]string,
+) func(context.Context, interface{}, *grpc.UnaryServerInfo, grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "metadata required")
+		}
+
+		consumers := md.Get("consumer")
+		if len(consumers) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "consumer metadata required")
+		}
+
+		consumer := consumers[0]
+
+		curMethod := info.FullMethod
+		consumerAllowance, ok := acl[consumer]
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "consumer not in acl")
+		}
+
+		if !hasAccess(consumerAllowance, curMethod) {
+			return nil, status.Error(codes.Unauthenticated, "consumer has no access to method")
+		}
+
+		return handler(ctx, req)
+	}
+}
+
 func makeAuthStreamInterceptor(acl map[string][]string,
 ) func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 ) error {
@@ -40,36 +116,6 @@ func makeAuthStreamInterceptor(acl map[string][]string,
 		return handler(srv, ss)
 	}
 
-}
-
-func makeAclUnaryInterceptor(acl map[string][]string,
-) func(context.Context, interface{}, *grpc.UnaryServerInfo, grpc.UnaryHandler) (interface{}, error) {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-	) (interface{}, error) {
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			return nil, status.Error(codes.Unauthenticated, "metadata required")
-		}
-
-		consumers := md.Get("consumer")
-		if len(consumers) == 0 {
-			return nil, status.Error(codes.Unauthenticated, "consumer metadata required")
-		}
-
-		consumer := consumers[0]
-
-		curMethod := info.FullMethod
-		consumerAllowance, ok := acl[consumer]
-		if !ok {
-			return nil, status.Error(codes.Unauthenticated, "consumer not in acl")
-		}
-
-		if !hasAccess(consumerAllowance, curMethod) {
-			return nil, status.Error(codes.Unauthenticated, "consumer has no access to method")
-		}
-
-		return handler(ctx, req)
-	}
 }
 
 func hasAccess(consumerAllowance []string, curMethod string) bool {
