@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"log"
 	"net"
 )
@@ -15,30 +12,6 @@ import (
 // В interceptor при вызове каждого метода чекаем
 // есть ли у этого консюмера доступ к этому методу, если нет то
 // возвращаем codes.Unauthenticated
-
-func authUnaryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "metadata required")
-	}
-
-	acl := md.Get("consumer")
-	if len(acl) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "consumer metadata required")
-	}
-
-	// consumer := acl[0]
-
-	// todo откуда-то взять список acl и проверить, есть ли доступ
-
-	return handler(ctx, req)
-}
-func authStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-) error {
-
-	return handler(srv, ss)
-
-}
 
 func StartMyMicroservice(ctx context.Context, listenAddr string, ACLData string) error {
 
@@ -52,6 +25,9 @@ func StartMyMicroservice(ctx context.Context, listenAddr string, ACLData string)
 	if err != nil {
 		return err
 	}
+	authUnaryInterceptor := makeAclUnaryInterceptor(acl)
+	authStreamInterceptor := makeAuthStreamInterceptor(acl)
+
 	server := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			authUnaryInterceptor,
