@@ -5,11 +5,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"strings"
 )
 
-func makeStatUnaryInterceptor(st *StatsTracker,
+func makeStatUnaryInterceptor(st *StatsTracker, lt *LogTracker,
 ) func(context.Context, interface{}, *grpc.UnaryServerInfo, grpc.UnaryHandler) (interface{}, error) {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 	) (interface{}, error) {
@@ -23,16 +24,29 @@ func makeStatUnaryInterceptor(st *StatsTracker,
 			return nil, status.Error(codes.Unauthenticated, "consumer metadata required")
 		}
 
+		consumer := consumers[0]
+		Method := info.FullMethod
+		host := getClientAddr(ctx)
+		if len(consumers) == 0 {
+			return nil, status.Error(codes.Unauthenticated, ":authority metadata required")
+		}
+
 		st.SendStats(DataPoint{
-			Consumer: consumers[0],
-			Method:   info.FullMethod,
+			Consumer: consumer,
+			Method:   Method,
+		})
+
+		lt.SendEvents(&Event{
+			Consumer: consumer,
+			Method:   Method,
+			Host:     host,
 		})
 
 		return handler(ctx, req)
 	}
 }
 
-func makeStatStreamInterceptor(st *StatsTracker,
+func makeStatStreamInterceptor(st *StatsTracker, lt *LogTracker,
 ) func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 ) error {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
@@ -46,9 +60,22 @@ func makeStatStreamInterceptor(st *StatsTracker,
 			return status.Error(codes.Unauthenticated, "consumer data required")
 		}
 
+		consumer := consumers[0]
+		Method := info.FullMethod
+		host := getClientAddr(ss.Context())
+		if len(consumers) == 0 {
+			return status.Error(codes.Unauthenticated, ":authority metadata required")
+		}
+
 		st.SendStats(DataPoint{
-			Consumer: consumers[0],
-			Method:   info.FullMethod,
+			Consumer: consumer,
+			Method:   Method,
+		})
+
+		lt.SendEvents(&Event{
+			Consumer: consumer,
+			Method:   Method,
+			Host:     host,
 		})
 
 		return handler(srv, ss)
@@ -134,4 +161,11 @@ func hasAccess(consumerAllowance []string, curMethod string) bool {
 
 	}
 	return false
+}
+
+func getClientAddr(ctx context.Context) string {
+	if p, ok := peer.FromContext(ctx); ok {
+		return p.Addr.String()
+	}
+	return "unknown"
 }

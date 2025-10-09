@@ -2,7 +2,6 @@ package main
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -13,7 +12,7 @@ type DataPoint struct {
 
 type StatsTracker struct {
 	subscribers map[int]chan DataPoint
-	curFreeId   atomic.Int64
+	curFreeId   int
 	rwMu        sync.RWMutex
 }
 
@@ -21,13 +20,15 @@ func MakeStatsTracker() *StatsTracker {
 	subscribers := make(map[int]chan DataPoint)
 	return &StatsTracker{
 		subscribers: subscribers,
-		curFreeId:   atomic.Int64{},
+		curFreeId:   0,
 		rwMu:        sync.RWMutex{},
 	}
 }
 
 func (sTr *StatsTracker) getFreeId() int {
-	return int(sTr.curFreeId.Add(1) - 1)
+	id := sTr.curFreeId
+	sTr.curFreeId++
+	return id
 }
 
 func (sTr *StatsTracker) AddSubscriber(done chan struct{}, intervalSeconds uint64) <-chan CurrentStat {
@@ -57,6 +58,7 @@ func (sTr *StatsTracker) AddSubscriber(done chan struct{}, intervalSeconds uint6
 				sTr.rwMu.Lock()
 				delete(sTr.subscribers, id)
 				sTr.rwMu.Unlock()
+				return
 			}
 		}
 	}()

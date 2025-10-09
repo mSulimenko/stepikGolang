@@ -11,16 +11,33 @@ import (
 type AdminManager struct {
 	UnimplementedAdminServer
 	STr *StatsTracker
+	LTr *LogTracker
 }
 
-func MakeAdminManager(sTr *StatsTracker) *AdminManager {
+func MakeAdminManager(sTr *StatsTracker, lTr *LogTracker) *AdminManager {
 	return &AdminManager{
 		STr: sTr,
+		LTr: lTr,
 	}
 }
 
-func (am *AdminManager) Logging(*Nothing, Admin_LoggingServer) error {
-	return status.Errorf(codes.Unimplemented, "method Logging not implemented")
+func (am *AdminManager) Logging(n *Nothing, admls Admin_LoggingServer) error {
+	done := make(chan struct{})
+	logStream := am.LTr.AddSubscriber(done)
+
+	for {
+		select {
+		case <-admls.Context().Done():
+			done <- struct{}{}
+			return admls.Context().Err()
+
+		case curLog := <-logStream:
+			if err := admls.Send(curLog); err != nil {
+				log.Println("error generating response", err.Error())
+				return err
+			}
+		}
+	}
 }
 
 func (am *AdminManager) Statistics(statInterval *StatInterval, admss Admin_StatisticsServer) error {

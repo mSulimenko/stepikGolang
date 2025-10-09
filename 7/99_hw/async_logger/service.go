@@ -26,14 +26,15 @@ func StartMyMicroservice(ctx context.Context, listenAddr string, ACLData string)
 	}
 
 	statsTracker := MakeStatsTracker()
-	adminServ := MakeAdminManager(statsTracker)
+	logTracker := MakeLogTracker()
+	adminServ := MakeAdminManager(statsTracker, logTracker)
 	bizServ := MakeBizManager()
 
 	authUnaryInterceptor := makeAclUnaryInterceptor(acl)
 	authStreamInterceptor := makeAuthStreamInterceptor(acl)
 
-	statUnaryInterceptor := makeStatUnaryInterceptor(statsTracker)
-	statStreamInterceptor := makeStatStreamInterceptor(statsTracker)
+	statUnaryInterceptor := makeStatUnaryInterceptor(statsTracker, logTracker)
+	statStreamInterceptor := makeStatStreamInterceptor(statsTracker, logTracker)
 
 	server := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
