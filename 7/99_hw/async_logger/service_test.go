@@ -366,7 +366,7 @@ func TestStat(t *testing.T) {
 	biz.Add(getConsumerCtx("biz_user"), &Nothing{})
 	biz.Test(getConsumerCtx("biz_admin"), &Nothing{})
 
-	wait(201) // 2 sec
+	wait(200) // 2 sec
 
 	expectedStat1 := &Stat{
 		ByMethod: map[string]uint64{
